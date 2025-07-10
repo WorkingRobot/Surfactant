@@ -96,7 +96,7 @@ jobs:
 
             // find exact SHA match
             let target = runs.find(r => r.head_sha === process.env.BASE_SHA)
-                        || runs.find(r => r.id !== context.runId);
+                        || runs.find(r => r.id !== context.run_id);
             if (!target) {
               console.log("No previous successful run found");
               return;

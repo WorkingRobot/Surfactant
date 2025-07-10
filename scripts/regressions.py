@@ -250,12 +250,11 @@ def test_gha(old_folders: dict[str, str], repo: Optional[str], current_run: Opti
         if repo and current_run:
             run_href = f"https://github.com/{repo}/actions/runs/{current_run[1]}"
             commit_href = f"https://github.com/{repo}/commit/{current_run[0]}"
-            summary += f"\n<small>Run <a href='{run_href}'>#{current_run[1]}</a> for commit <a href='{commit_href}'><pre>{current_run[0][:7]}</pre></a></small>\n"
+            summary += f"\n<sub>For commit <a href='{commit_href}'><code>{current_run[0][:7]}</code></a> (Run <a href='{run_href}'>{current_run[1]}</a>)</sub>"
         if repo and last_run:
             run_href = f"https://github.com/{repo}/actions/runs/{last_run[1]}"
             commit_href = f"https://github.com/{repo}/commit/{last_run[0]}"
-            summary += f"\n<small>Compared against run <a href='{run_href}'>#{last_run[1]}</a> for commit <a href='{commit_href}'><pre>{last_run[0][:7]}</pre></a></small>\n"
-
+            summary += f"\n<sub>Compared against commit <a href='{commit_href}'><code>{last_run[0][:7]}</code></a> (Run <a href='{run_href}'>{last_run[1]}</a>)</sub>"
     return summary.rstrip(), new_folders
 
 
