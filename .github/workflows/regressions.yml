@@ -72,50 +72,57 @@ jobs:
           ARTIFACT_NAME: diff-output
         with:
           script: |
-            try {
-              const { owner, repo } = context.repo;
-              
-              // list recent successful runs of this workflow
-              const runs = await github.rest.actions.listWorkflowRuns({
-                owner, repo,
-                workflow_id: context.workflow,
-                status: "success",
-                per_page: 100
-              }).then(r => r.data.workflow_runs);
-
-              // find exact SHA match
-              let target = runs.find(r => r.head_sha === process.env.BASE_SHA)
-                         || runs.find(r => r.id !== context.runId);
-              if (!target) {
-                console.log("No previous successful run found");
-                return;
-              }
-              console.log(`Using run ${target.id} (${target.head_sha})`);
-
-              // locate our artifact
-              const arts = await github.rest.actions.listWorkflowRunArtifacts({
-                owner, repo,
-                run_id: target.id
-              });
-              const art = arts.data.artifacts.find(a => a.name === process.env.ARTIFACT_NAME);
-              if (!art) {
-                console.log(`No artifact named ${process.env.ARTIFACT_NAME}`);
-                return;
-              }
-
-              // download & unzip
-              const dl = await github.rest.actions.downloadArtifact({
-                owner, repo,
-                artifact_id: art.id,
-                archive_format: "zip"
-              });
-              require("fs").writeFileSync("prev.zip", Buffer.from(dl.data));
-              require("child_process").execSync("unzip -o prev.zip -d prev");
-              core.setOutput("diff_input", "prev/diff.json");
-            } catch (error) {
-              console.log(`Failed to fetch previous artifact: ${error.message}`);
-              console.log("This is expected for the first run or when no previous artifacts exist");
+            if (!process.env.BASE_SHA) {
+              console.log("No base SHA provided, skipping fetch");
+              return;
             }
+
+            const { owner, repo } = context.repo;
+
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              owner,
+              repo,
+              run_id: context.runId,
+            });
+            const workflow_id = run.workflow_id;
+            
+            // list recent successful runs of this workflow
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner, repo,
+              workflow_id,
+              status: "success",
+              per_page: 500
+            }).then(r => r.data.workflow_runs);
+
+            // find exact SHA match
+            let target = runs.find(r => r.head_sha === process.env.BASE_SHA)
+                        || runs.find(r => r.id !== context.runId);
+            if (!target) {
+              console.log("No previous successful run found");
+              return;
+            }
+            console.log(`Using run ${target.id} (${target.head_sha})`);
+
+            // locate our artifact
+            const { data: arts } = await github.rest.actions.listWorkflowRunArtifacts({
+              owner, repo,
+              run_id: target.id
+            });
+            const art = arts.artifacts.find(a => a.name === process.env.ARTIFACT_NAME);
+            if (!art) {
+              console.log(`No artifact named ${process.env.ARTIFACT_NAME}`);
+              return;
+            }
+
+            // download & unzip
+            const dl = await github.rest.actions.downloadArtifact({
+              owner, repo,
+              artifact_id: art.id,
+              archive_format: "zip"
+            });
+            require("fs").writeFileSync("prev.zip", Buffer.from(dl.data));
+            require("child_process").execSync("unzip -o prev.zip -d prev");
+            core.setOutput("diff_input", "prev/diff.json");
 
       - name: Run diff script
         id: script
