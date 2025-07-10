@@ -138,7 +138,6 @@ jobs:
           LAST_RUN_ID: ${{ steps.fetch.outputs.target_id || '' }}
           LAST_RUN_SHA: ${{ steps.fetch.outputs.target_sha || '' }}
         run: |
-          mkdir -p out
           python scripts/regressions.py --gha
 
       - name: Upload output artifact
