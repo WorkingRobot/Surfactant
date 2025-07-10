@@ -13,6 +13,7 @@ import random
 import sys
 import time
 import uuid
+import traceback
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
@@ -182,7 +183,7 @@ def test_all_data_folders():
             logger.error(f"Error generating SBOM for {folder.name}: {e}")
 
 
-def test_gha(old_folders: dict[str, str], repo: Optional[str], current_run: Optional[tuple[str, str]], last_run: Optional[tuple[str, str]]) -> tuple[str, dict[str, str]]:
+def test_gha(old_folders: dict[str, dict[str, Optional[str]]], repo: Optional[str], current_run: Optional[tuple[str, str]], last_run: Optional[tuple[str, str]]) -> tuple[str, dict[str, dict[str, Optional[str]]]]:
     """
     Test function for CI/CD mode.
 
@@ -218,33 +219,46 @@ def test_gha(old_folders: dict[str, str], repo: Optional[str], current_run: Opti
     if not data_folders:
         summary += "## ❓ No Test Folders Found\n"
     else:
-        diffs = {}
+        results = {}
         for folder in data_folders:
-            old_string = old_folders.get(folder.name, "")
-            new_string = generate_sbom_string(
-                input_folder=str(folder),
-                deterministic=True,
-            )
-            new_folders[folder.name] = new_string
-            if old_string != new_string:
+            old_data = old_folders.get(folder.name, {'sbom': '', 'stacktrace': None})
+            new_data = {'sbom': old_data['sbom'], 'stacktrace': None}
+            try:
+                new_data['sbom'] = generate_sbom_string(
+                    input_folder=str(folder),
+                    deterministic=True,
+                )
+            except (FileNotFoundError, ValueError, RuntimeError) as e:
+                logger.error(f"Error generating SBOM for {folder.name}: {e}")
+                new_data['stacktrace'] = traceback.format_exc()
+                
+            new_folders[folder.name] = new_data
+            if new_data['sbom'] != old_data['sbom'] and new_data['sbom']:
                 logger.info(f"Changes detected in folder: {folder.name}")
-                for line in show_diff(old_string, new_string).splitlines():
+                for line in show_diff(old_data['sbom'], new_data['sbom']).splitlines():
                     logger.info(line)
-                diffs[folder.name] = show_diff(old_string, new_string, 100)
+                results[folder.name] = { 'diff': show_diff(old_data['sbom'], new_data['sbom'], 100) }
+            elif new_data['stacktrace']:
+                results[folder.name] = {'stacktrace': new_data['stacktrace']}
 
-        if not diffs:
+        if not results:
             summary += "## ✅ No SBOM Changes Detected\n"
         else:
-            summary += f"## 🧪 SBOM Results ({len(diffs)}/{len(data_folders)})\n\n"
-            for folder_name, diff in diffs.items():
+            summary += f"## 🧪 SBOM Results ({len(results)}/{len(data_folders)})\n\n"
+            for folder_name, result in results.items():
                 summary += "<details>\n"
                 summary += "<summary><h3>"
+                if 'stacktrace' in result:
+                    summary += f"❗️ "
                 summary += f"{folder_name}"
                 if repo and current_run:
                     href = f"https://github.com/{repo}/tree/{current_run[0]}/tests/data/{folder_name}"
                     summary += f' (<a href="{href}">Link</a>)'
                 summary += "</h3></summary>\n\n"
-                summary += f"```diff\n{diff}\n```\n"
+                if 'stacktrace' in result:
+                    summary += f"```\n{result['stacktrace']}\n```\n"
+                elif 'diff' in result:
+                    summary += f"```diff\n{result['diff']}\n```\n"
                 summary += "</details>\n"
         
         if repo and current_run:
