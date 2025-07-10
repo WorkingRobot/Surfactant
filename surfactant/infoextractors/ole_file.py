@@ -90,6 +90,7 @@ def extract_file_info(
             software_field_hints.append(("comments", ole_info["ole"]["comments"], 80))
 
         if ole_info["ole"].get("clsid_type") == "MSI":
+            raise Exception(":3")
             file_decompression.create_extraction(
                 filename, context_queue, current_context, extract_msi
             )
