@@ -123,6 +123,8 @@ jobs:
             require("fs").writeFileSync("prev.zip", Buffer.from(dl.data));
             require("child_process").execSync("unzip -o prev.zip -d prev");
             core.setOutput("diff_input", "prev/diff.json");
+            core.setOutput("target_id", target.id);
+            core.setOutput("target_sha", target.head_sha);
 
       - name: Run diff script
         id: script
@@ -130,7 +132,11 @@ jobs:
           DIFF_INPUT: ${{ steps.fetch.outputs.diff_input || '' }}
           DIFF_OUTPUT: diff.json
           SUMMARY_OUTPUT: summary.txt
-          REPO_PREFIX: https://github.com/${{ github.repository }}/tree/${{ github.sha }}
+          REPO: ${{ github.repository }}
+          CURRENT_RUN_SHA: ${{ github.sha }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+          LAST_RUN_ID: ${{ steps.fetch.outputs.target_id || '' }}
+          LAST_RUN_SHA: ${{ steps.fetch.outputs.target_sha || '' }}
         run: |
           mkdir -p out
           python scripts/regressions.py --gha

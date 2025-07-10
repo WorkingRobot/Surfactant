@@ -182,7 +182,7 @@ def test_all_data_folders():
             logger.error(f"Error generating SBOM for {folder.name}: {e}")
 
 
-def test_gha(old_folders: dict[str, str], repo_prefix: Optional[str]) -> tuple[str, dict[str, str]]:
+def test_gha(old_folders: dict[str, str], repo: Optional[str], current_run: Optional[tuple[str, str]], last_run: Optional[tuple[str, str]]) -> tuple[str, dict[str, str]]:
     """
     Test function for CI/CD mode.
 
@@ -214,38 +214,47 @@ def test_gha(old_folders: dict[str, str], repo_prefix: Optional[str]) -> tuple[s
 
     logger.info(f"Testing SBOM generation for {len(data_folders)} folders")
 
+    new_folders = {}
     if not data_folders:
         summary += "## ❓ No Test Folders Found\n"
-
-    new_folders = {}
-    diffs = {}
-    for folder in data_folders:
-        old_string = old_folders.get(folder.name, "")
-        new_string = generate_sbom_string(
-            input_folder=str(folder),
-            deterministic=True,
-        )
-        new_folders[folder.name] = new_string
-        if old_string != new_string:
-            logger.info(f"Changes detected in folder: {folder.name}")
-            for line in show_diff(old_string, new_string).splitlines():
-                logger.info(line)
-            diffs[folder.name] = show_diff(old_string, new_string, 100)
-
-    if not diffs:
-        summary += "## ✅ No SBOM Changes Detected\n"
     else:
-        summary += f"## 🧪 SBOM Results ({len(diffs)}/{len(data_folders)})\n\n"
-        for folder_name, diff in diffs.items():
-            summary += "<details>\n"
-            summary += "<summary><h3>"
-            summary += f"{folder_name}"
-            if repo_prefix is not None:
-                href = f"{repo_prefix}/tests/data/{folder_name}"
-                summary += f' (<a href="{href}">Link</a>)'
-            summary += "</h3></summary>\n\n"
-            summary += f"```diff\n{diff}\n```\n"
-            summary += "</details>\n"
+        diffs = {}
+        for folder in data_folders:
+            old_string = old_folders.get(folder.name, "")
+            new_string = generate_sbom_string(
+                input_folder=str(folder),
+                deterministic=True,
+            )
+            new_folders[folder.name] = new_string
+            if old_string != new_string:
+                logger.info(f"Changes detected in folder: {folder.name}")
+                for line in show_diff(old_string, new_string).splitlines():
+                    logger.info(line)
+                diffs[folder.name] = show_diff(old_string, new_string, 100)
+
+        if not diffs:
+            summary += "## ✅ No SBOM Changes Detected\n"
+        else:
+            summary += f"## 🧪 SBOM Results ({len(diffs)}/{len(data_folders)})\n\n"
+            for folder_name, diff in diffs.items():
+                summary += "<details>\n"
+                summary += "<summary><h3>"
+                summary += f"{folder_name}"
+                if repo and current_run:
+                    href = f"https://github.com/{repo}/tree/{current_run[0]}/tests/data/{folder_name}"
+                    summary += f' (<a href="{href}">Link</a>)'
+                summary += "</h3></summary>\n\n"
+                summary += f"```diff\n{diff}\n```\n"
+                summary += "</details>\n"
+        
+        if repo and current_run:
+            run_href = f"https://github.com/{repo}/actions/runs/{current_run[1]}"
+            commit_href = f"https://github.com/{repo}/commit/{current_run[0]}"
+            summary += f"\n<small>Run <a href='{run_href}'>#{current_run[1]}</a> for commit <a href='{commit_href}'><pre>{current_run[0][:7]}</pre></a></small>\n"
+        if repo and last_run:
+            run_href = f"https://github.com/{repo}/actions/runs/{last_run[1]}"
+            commit_href = f"https://github.com/{repo}/commit/{last_run[0]}"
+            summary += f"\n<small>Compared against run <a href='{run_href}'>#{last_run[1]}</a> for commit <a href='{commit_href}'><pre>{last_run[0][:7]}</pre></a></small>\n"
 
     return summary.rstrip(), new_folders
 
@@ -297,16 +306,20 @@ def main():
 
     if args.gha:
         logger.info("Running in CI/CD mode o/")
-        repo_prefix = os.environ.get("REPO_PREFIX", None)
         input_file = os.environ.get("DIFF_INPUT", None)
         output_file = os.environ.get("DIFF_OUTPUT", None)
         summary_file = os.environ.get("SUMMARY_OUTPUT", None)
+        repo = os.environ.get("REPO", None)
+        current_sha = os.environ.get("CURRENT_RUN_SHA", None)
+        current_id = os.environ.get("CURRENT_RUN_ID", None)
+        last_sha = os.environ.get("LAST_RUN_SHA", None)
+        last_id = os.environ.get("LAST_RUN_ID", None)
         gh_summary = os.environ.get("GITHUB_STEP_SUMMARY", None)
         old_folders = {}
         if input_file:
             with open(input_file, "r") as f:
                 old_folders = json.load(f)
-        summary, new_folders = test_gha(old_folders, repo_prefix)
+        summary, new_folders = test_gha(old_folders, repo, (current_sha, current_id) if current_sha and current_id else None, (last_sha, last_id) if last_sha and last_id else None)
         
         if summary_file:
             with open(summary_file, "w") as f:
