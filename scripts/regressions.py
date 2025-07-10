@@ -300,17 +300,24 @@ def main():
         repo_prefix = os.environ.get("REPO_PREFIX", None)
         input_file = os.environ.get("DIFF_INPUT", None)
         output_file = os.environ.get("DIFF_OUTPUT", None)
-        summary_file = os.environ.get("GITHUB_STEP_SUMMARY", None)
+        summary_file = os.environ.get("SUMMARY_OUTPUT", None)
+        gh_summary = os.environ.get("GITHUB_STEP_SUMMARY", None)
         old_folders = {}
         if input_file:
             with open(input_file, "r") as f:
                 old_folders = json.load(f)
         summary, new_folders = test_gha(old_folders, repo_prefix)
+        
         if summary_file:
-            with open(summary_file, "a") as f:
+            with open(summary_file, "w") as f:
                 print(summary, file=f)
         else:
             print(summary)
+            
+        if gh_summary:
+            with open(gh_summary, "a") as f:
+                print(summary, file=f)
+        
         if output_file:
             with open(output_file, "w") as f:
                 json.dump(new_folders, f, indent=4)
